@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modelo de mantenimiento — red vs. solar aislada en ZNI</title>
+<style>
+  :root{
+    --ink:#0e1418; --panel:#151d23; --panel2:#1b252c; --line:#2a3841;
+    --text:#e8edf0; --dim:#8fa3ad; --faint:#5c6f79;
+    --grid:#d08a3e; --solar:#49a6db; --cross:#e8edf0; --warn:#e0b04a;
+    --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:var(--sans);
+       line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:28px 20px 60px}
+  header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:24px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+           color:var(--faint);margin:0 0 8px}
+  h1{font-size:23px;font-weight:650;margin:0;letter-spacing:-.01em}
+  h1 .g{color:var(--grid)} h1 .s{color:var(--solar)}
+  .sub{color:var(--dim);font-size:14px;margin:10px 0 0;max-width:70ch}
+  .capexnote{margin-top:12px;font-family:var(--mono);font-size:11.5px;color:var(--warn);
+             border:1px dashed #4a3d20;border-radius:6px;padding:8px 12px;display:inline-block}
+
+  .stage{display:grid;grid-template-columns:1fr;gap:20px}
+  @media(min-width:900px){.stage{grid-template-columns:1.3fr 1fr}}
+  .chartcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 16px 8px}
+  .verdict{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;
+           display:flex;flex-direction:column;gap:16px}
+  .vhead{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .thr{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1;letter-spacing:-.02em}
+  .thr small{font-size:13px;color:var(--dim);font-weight:400}
+  .thr2{font-family:var(--mono);font-size:22px;font-weight:600;line-height:1}
+  .verdict p{margin:0;font-size:13px;color:var(--dim)}
+  .verdict .read{color:var(--text);font-size:13.5px}
+  .chip{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px;border:1px solid var(--line)}
+  .chip.g{color:var(--grid);border-color:#4a3620} .chip.s{color:var(--solar);border-color:#1e3f52}
+  .divider{height:1px;background:var(--line)}
+
+  svg{width:100%;height:auto;display:block;overflow:visible}
+  .axis{stroke:var(--line);stroke-width:1}
+  .tick{fill:var(--faint);font-family:var(--mono);font-size:10px}
+  .albl{fill:var(--dim);font-family:var(--mono);font-size:10.5px;letter-spacing:.08em}
+  .curveG{fill:none;stroke:var(--grid);stroke-width:2.4}
+  .curveS{fill:none;stroke:var(--solar);stroke-width:2.4}
+  .xline{stroke:var(--cross);stroke-width:1;stroke-dasharray:3 3;opacity:.6}
+  .xdot{fill:var(--cross)}
+  .legend{display:flex;gap:18px;padding:4px 4px 12px;font-size:12px;color:var(--dim);flex-wrap:wrap}
+  .legend b{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+
+  /* data panel */
+  .datapanel{margin-top:26px;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .dphead{padding:14px 18px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;
+          letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+  .dpgrid{display:grid;grid-template-columns:1fr;gap:0}
+  @media(min-width:760px){.dpgrid{grid-template-columns:1fr 1fr}}
+  .dpcol{padding:16px 18px}
+  .dpcol+.dpcol{border-top:1px solid var(--line)}
+  @media(min-width:760px){.dpcol+.dpcol{border-top:none;border-left:1px solid var(--line)}}
+  .dptitle{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin:0 0 12px}
+  .dptitle.g{color:var(--grid)} .dptitle.s{color:var(--solar)}
+  .dprow{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12.5px;
+         border-bottom:1px dotted #222d35}
+  .dprow span{color:var(--dim)}
+  .dprow b{font-family:var(--mono);font-weight:500;color:var(--text);white-space:nowrap}
+  .dprow.tot{border-bottom:none;border-top:1px solid var(--line);margin-top:6px;padding-top:9px}
+  .dprow.tot span{color:var(--text);font-weight:600}
+  .dprow.tot b{font-size:14px;font-weight:650}
+  .dprow.sub b{color:var(--dim)}
+  .dpfull{padding:14px 18px;border-top:1px solid var(--line);background:var(--panel2)}
+  .dpfull .dprow{border-bottom:none;padding:3px 0}
+  .dpfull .dprow b{color:var(--warn)}
+
+  .controls{margin-top:26px;display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:680px){.controls{grid-template-columns:1fr 1fr}}
+  @media(min-width:1000px){.controls{grid-template-columns:1fr 1fr 1fr}}
+  fieldset{border:1px solid var(--line);border-radius:9px;padding:14px 14px 6px;margin:0;background:var(--panel)}
+  legend{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+         color:var(--faint);padding:0 6px}
+  fieldset.g legend{color:var(--grid)} fieldset.s legend{color:var(--solar)}
+  .ctl{margin-bottom:11px}
+  .ctl label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin-bottom:5px;gap:8px}
+  .ctl label .val{font-family:var(--mono);color:var(--text)}
+  input[type=range]{width:100%;accent-color:var(--faint);height:3px}
+  fieldset.g input[type=range]{accent-color:var(--grid)}
+  fieldset.s input[type=range]{accent-color:var(--solar)}
+
+  .eq{margin-top:30px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 22px}
+  .eq h2{font-size:12px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:0 0 14px}
+  .eq h3{font-size:12px;font-family:var(--mono);letter-spacing:.06em;color:var(--dim);margin:18px 0 8px;text-transform:uppercase}
+  .eq code{font-family:var(--mono);font-size:12.5px;color:var(--text);background:var(--panel2);
+           padding:2px 7px;border-radius:5px;display:inline-block;margin-bottom:3px}
+  .eq .row{display:grid;grid-template-columns:1fr;gap:4px;padding:9px 0;border-top:1px solid var(--line)}
+  .eq .row:first-of-type{border-top:none}
+  .eq .row span{font-size:12.5px;color:var(--dim)}
+  .eq .row span em{color:var(--warn);font-style:normal}
+  .warn{margin-top:22px;border-left:3px solid var(--grid);background:#1a130a;border-radius:0 8px 8px 0;
+        padding:14px 18px;font-size:13px;color:#e7cba6}
+  .warn b{color:#f0d9b8}
+  .foot{margin-top:26px;color:var(--faint);font-size:11.5px;font-family:var(--mono);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Modelo de sostenibilidad · CAPEX excluido como inversión social</p>
+    <h1>Si el capital lo regala el Estado, ¿qué puede la población <em>sostener</em>: la <span class="g">red</span> o la <span class="s">solar aislada</span>?</h1>
+    <p class="sub">Aquí no se compara qué cuesta construir, sino qué cuesta <b>mantener cada año</b>. La red paga cuadrillas y pérdidas; la solar paga reposición de baterías. El cruce ya no ocurre en densidad: ocurre en <b>distancia</b>.</p>
+    <div class="capexnote" id="capexNote"></div>
+  </header>
+
+  <div class="stage">
+    <div class="chartcard">
+      <div class="legend">
+        <span><b style="background:var(--grid)"></b>Red: AOM línea + reticulación + pérdidas</span>
+        <span><b style="background:var(--solar)"></b>Solar: AOM FV + reposición batería e inversor</span>
+      </div>
+      <svg id="chart" viewBox="0 0 560 340" preserveAspectRatio="xMidYMid meet" aria-label="Costo recurrente por habitante vs distancia"></svg>
+    </div>
+
+    <div class="verdict">
+      <div>
+        <div class="vhead">Umbral de distancia</div>
+        <div class="thr" id="thrDist">—</div>
+        <p class="read" id="verdictText" style="margin-top:8px"></p>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <div class="vhead">Umbral de densidad (tu variable)</div>
+        <div class="thr2" id="thrDens">—</div>
+        <p id="densText" style="margin-top:8px"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAILED DATA PANEL -->
+  <div class="datapanel">
+    <div class="dphead">Pantalla de datos · desglose completo para el caso actual</div>
+    <div class="dpgrid">
+      <div class="dpcol">
+        <p class="dptitle g">Red convencional (MT)</p>
+        <div id="gridRows"></div>
+      </div>
+      <div class="dpcol">
+        <p class="dptitle s">Generación solar aislada</p>
+        <div id="solRows"></div>
+      </div>
+    </div>
+    <div class="dpfull">
+      <div class="dprow"><span>CAPEX de instalación — <b style="color:var(--dim)">excluido del modelo, mostrado solo para ver la magnitud de lo que se dona</b></span><b></b></div>
+      <div id="capexRows"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <fieldset>
+      <legend>Asentamiento</legend>
+      <div class="ctl"><label>Viviendas <span class="val" id="hhV">150</span></label>
+        <input type="range" id="hh" min="20" max="600" step="10" value="150"></div>
+      <div class="ctl"><label>Personas / vivienda <span class="val" id="pphV">4.0</span></label>
+        <input type="range" id="pph" min="2" max="6" step="0.1" value="4"></div>
+      <div class="ctl"><label>Demanda kWh/día · vivienda <span class="val" id="demV">2.6</span></label>
+        <input type="range" id="dem" min="0.5" max="8" step="0.1" value="2.6"></div>
+      <div class="ctl"><label>Densidad (hab/km²) <span class="val" id="densV">20</span></label>
+        <input type="range" id="dens" min="1" max="100" step="1" value="20"></div>
+    </fieldset>
+
+    <fieldset class="g">
+      <legend>Red · mantenimiento</legend>
+      <div class="ctl"><label>Distancia a la red (km) <span class="val" id="dgV">5.0</span></label>
+        <input type="range" id="dg" min="0.5" max="40" step="0.5" value="5"></div>
+      <div class="ctl"><label>AOM línea MT (M COP/km·año) <span class="val" id="amtV">2.00</span></label>
+        <input type="range" id="amt" min="0.5" max="6" step="0.05" value="2.00"></div>
+      <div class="ctl"><label>AOM reticulación BT (M COP/km·año) <span class="val" id="abtV">1.20</span></label>
+        <input type="range" id="abt" min="0.2" max="4" step="0.05" value="1.20"></div>
+      <div class="ctl"><label>Dispersión k <span class="val" id="kdV">0.15</span></label>
+        <input type="range" id="kd" min="0.02" max="0.5" step="0.01" value="0.15"></div>
+    </fieldset>
+
+    <fieldset class="g">
+      <legend>Red · pérdidas (datos CREG)</legend>
+      <div class="ctl"><label>Pérdidas línea MT (%/km) <span class="val" id="pmtV">0.05</span></label>
+        <input type="range" id="pmt" min="0" max="0.5" step="0.01" value="0.05"></div>
+      <div class="ctl"><label>Pérdidas transformador (%) <span class="val" id="ptrV">2.0</span></label>
+        <input type="range" id="ptr" min="0" max="4" step="0.05" value="2.0"></div>
+      <div class="ctl"><label>Pérdidas red BT (%) <span class="val" id="pbtV">2.5</span></label>
+        <input type="range" id="pbt" min="0" max="5" step="0.05" value="2.5"></div>
+      <div class="ctl"><label>Costo energía (COP/kWh) <span class="val" id="ceV">450</span></label>
+        <input type="range" id="ce" min="200" max="1400" step="10" value="450"></div>
+    </fieldset>
+
+    <fieldset class="s">
+      <legend>Solar · reposición</legend>
+      <div class="ctl"><label>Costo batería (M COP/kWh) <span class="val" id="cbV">1.00</span></label>
+        <input type="range" id="cb" min="0.3" max="2.5" step="0.05" value="1.00"></div>
+      <div class="ctl"><label>Autonomía (días) <span class="val" id="auV">0.5</span></label>
+        <input type="range" id="au" min="0" max="2" step="0.1" value="0.5"></div>
+      <div class="ctl"><label>Vida batería (años) <span class="val" id="blV">8</span></label>
+        <input type="range" id="bl" min="3" max="15" step="1" value="8"></div>
+      <div class="ctl"><label>Costo inversor (M COP/kWp) <span class="val" id="ciV">0.60</span></label>
+        <input type="range" id="ci" min="0.1" max="2" step="0.05" value="0.60"></div>
+      <div class="ctl"><label>Vida inversor (años) <span class="val" id="ilV">12</span></label>
+        <input type="range" id="il" min="5" max="20" step="1" value="12"></div>
+    </fieldset>
+
+    <fieldset class="s">
+      <legend>Solar · operación</legend>
+      <div class="ctl"><label>Factor de planta (%) <span class="val" id="cfacV">16.0</span></label>
+        <input type="range" id="cfac" min="15" max="30" step="0.1" value="16.0"></div>
+      <div class="ctl"><label>AOM FV (mil COP/kWp·año) <span class="val" id="afvV">57</span></label>
+        <input type="range" id="afv" min="20" max="150" step="1" value="57"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Fondo de reposición y referencia</legend>
+      <div class="ctl"><label>Tasa del fondo (%) <span class="val" id="iV">0.0</span></label>
+        <input type="range" id="i" min="0" max="15" step="0.5" value="0"></div>
+      <div class="ctl"><label>CAPEX línea MT (M COP/km) <span class="val" id="ckxV">150</span></label>
+        <input type="range" id="ckx" min="50" max="500" step="10" value="150"></div>
+      <div class="ctl"><label>CAPEX FV (M COP/kWp) <span class="val" id="cwxV">7.6</span></label>
+        <input type="range" id="cwx" min="3" max="12" step="0.1" value="7.6"></div>
+    </fieldset>
+  </div>
+
+  <div class="eq">
+    <h2>Todas las fórmulas del modelo</h2>
+
+    <h3>1 · El asentamiento</h3>
+    <div class="row"><code>hab = N_viv × personas_por_vivienda</code>
+      <span>Población servida.</span></div>
+    <div class="row"><code>E_entregada = N_viv × demanda_diaria × 365</code>
+      <span>Energía anual que llega al usuario [kWh/año]. La demanda se mide <em>por vivienda</em>, no por persona: es la vivienda la que tiene nevera y bombillos.</span></div>
+    <div class="row"><code>D_viv = D_hab ÷ personas_por_vivienda</code>
+      <span><em>La conversión clave.</em> El DANE reporta hab/km², pero la red no conecta personas: conecta viviendas. Una casa de 8 personas necesita una acometida, igual que una de 2. La longitud de red depende de la densidad de <em>puntos de conexión</em>, no de habitantes.</span></div>
+
+    <h3>2 · Geometría de la red</h3>
+    <div class="row"><code>L_ret = k × N_viv ÷ √D_viv</code>
+      <span>Longitud de reticulación interna. Sale del resultado geométrico de que conectar N puntos dispersos en un área requiere longitud ∝ N/√densidad. Aquí —y solo aquí— entra la densidad.</span></div>
+    <div class="row"><code>L_total = d_red + L_ret</code>
+      <span>Troncal hasta el SIN más la red interna.</span></div>
+
+    <h3>3 · Mantenimiento de la red (el corazón, ahora que el CAPEX no cuenta)</h3>
+    <div class="row"><code>AOM_red = a_MT × d_red + a_BT × L_ret</code>
+      <span><em>Este es el cambio estructural.</em> Antes el O&amp;M era un % del CAPEX; si el CAPEX es donado, ese porcentaje pierde sentido. La CREG midió el AOM directamente en <em>COP por km por año</em>: cuadrilla, inspección, poda, herramienta. Mantener 10 km cuesta el doble que 5 km aunque los postes hayan sido gratis. <b>La distancia sigue cobrando, para siempre.</b></span></div>
+
+    <h3>4 · Pérdidas: descomposición honesta</h3>
+    <div class="row"><code>%_pérdidas = p_MT_por_km × d_red + p_transformador + p_BT</code>
+      <span>Solo el primer término depende de la distancia. Los otros dos son locales y fijos. La CREG midió en ZNI: MT 0,14–2,00 %, transformador 1,65–2,23 %, BT 1,26–3,94 %. <em>El término que tu tesis necesita que domine es el más pequeño de los tres.</em></span></div>
+    <div class="row"><code>E_inyectada = E_entregada ÷ (1 − %_pérdidas)</code>
+      <span>Hay que inyectar más de lo que se entrega.</span></div>
+    <div class="row"><code>E_perdida = E_inyectada − E_entregada</code>
+      <span>Energía disipada como calor: nunca se factura.</span></div>
+    <div class="row"><code>Costo_pérdidas = E_perdida × c_energía</code>
+      <span>Se valora al costo marginal de generar y transportar el kWh, no a la tarifa completa.</span></div>
+    <div class="row"><code>Recurrente_red = AOM_red + Costo_pérdidas</code>
+      <span>Todo lo que la red exige cada año. Sin CRF: no hay capital que amortizar.</span></div>
+
+    <h3>5 · La solar y el factor de fondo de amortización</h3>
+    <div class="row"><code>P_kWp = E_entregada ÷ (8760 × factor_planta)</code>
+      <span>Potencia FV necesaria.</span></div>
+    <div class="row"><code>C_batería = N_viv × demanda_diaria × autonomía</code>
+      <span>Capacidad de almacenamiento [kWh].</span></div>
+    <div class="row"><code>SFF(i, n) = i ÷ [(1+i)ⁿ − 1]</code>
+      <span><em>El factor de fondo de amortización</em> (sinking fund factor): cuánto hay que depositar cada año para acumular 1 peso en n años. Reemplaza al CRF. <b>Si i = 0 —una comunidad sin acceso bancario que no gana intereses— entonces SFF = 1/n</b>, es decir, simple división. Por eso la tasa de descuento casi no mueve nada aquí.</span></div>
+    <div class="row"><code>Reposición_batería = C_batería × c_batería × SFF(i, vida_batería)</code>
+      <span>Lo que hay que apartar cada año para pagar la próxima batería.</span></div>
+    <div class="row"><code>Reposición_inversor = P_kWp × c_inversor × SFF(i, vida_inversor)</code>
+      <span>El inversor también muere, alrededor del año 12.</span></div>
+    <div class="row"><code>Recurrente_solar = AOM_FV + Reposición_batería + Reposición_inversor</code>
+      <span>Nótese: <b>no depende de la distancia</b>. Ahí está toda la asimetría del problema.</span></div>
+
+    <h3>6 · Los dos umbrales</h3>
+    <div class="row"><code>d* : Recurrente_red(d) = Recurrente_solar</code>
+      <span>Distancia a la que mantener la línea cuesta lo mismo que reponer baterías. <b>Este es el umbral que el modelo sí produce.</b></span></div>
+    <div class="row"><code>D* : Recurrente_red(D) = Recurrente_solar</code>
+      <span>Densidad equivalente. Existe matemáticamente, pero cae tan abajo que ningún municipio real la alcanza — <em>tu umbral de densidad se evapora en el marco de mantenimiento</em>.</span></div>
+  </div>
+
+  <div class="warn" id="dominanceNote"></div>
+
+  <p class="foot">
+    AOM por km y pérdidas técnicas: CREG / Sistemas 2000 Consultores, «Determinación de Inversiones y Gastos de AOM… en Zonas No Interconectadas» (Circular 005-13, informe final 2012). Cifra base de mantenimiento de línea rural MT: $692.071/km·año en pesos de 2011 — <b>debes indexarla tú</b> (≈2× por IPC, ≈3× por SMLV, ya que el rubro es casi todo mano de obra).<br>
+    Parámetros solares: Echeverry &amp; Ortiz (U. Rosario, 2024), IRENA 2022, NREL. Costo unitario MT: Guerra Guisao (UdeA, 2024).<br>
+    Ninguna cifra aquí es una fuente: es un instrumento para explorar. Verifica cada valor antes de citarlo.
+  </p>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const ids=['hh','pph','dem','dens','dg','amt','abt','kd','pmt','ptr','pbt','ce','cb','au','bl','ci','il','cfac','afv','i','ckx','cwx'];
+const fmt=(x,d=0)=>{ if(!isFinite(x)) return '—'; return x.toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d}); };
+const M=x=>fmt(x/1e6,1)+' M';
+
+function readVals(){
+  const v={}; ids.forEach(k=>v[k]=parseFloat($(k).value));
+  $('hhV').textContent=fmt(v.hh); $('pphV').textContent=v.pph.toFixed(1);
+  $('demV').textContent=v.dem.toFixed(1); $('densV').textContent=fmt(v.dens);
+  $('dgV').textContent=v.dg.toFixed(1); $('amtV').textContent=v.amt.toFixed(2);
+  $('abtV').textContent=v.abt.toFixed(2); $('kdV').textContent=v.kd.toFixed(2);
+  $('pmtV').textContent=v.pmt.toFixed(2); $('ptrV').textContent=v.ptr.toFixed(2);
+  $('pbtV').textContent=v.pbt.toFixed(2); $('ceV').textContent=fmt(v.ce);
+  $('cbV').textContent=v.cb.toFixed(2); $('auV').textContent=v.au.toFixed(1);
+  $('blV').textContent=fmt(v.bl); $('ciV').textContent=v.ci.toFixed(2);
+  $('ilV').textContent=fmt(v.il); $('cfacV').textContent=v.cfac.toFixed(1);
+  $('afvV').textContent=fmt(v.afv); $('iV').textContent=v.i.toFixed(1);
+  $('ckxV').textContent=fmt(v.ckx); $('cwxV').textContent=v.cwx.toFixed(1);
+  return v;
+}
+
+function sff(i,n){ return i<=0 ? 1/n : i/(Math.pow(1+i,n)-1); }
+
+function calc(v,dg,dens){
+  const hab=v.hh*v.pph;
+  const E=v.hh*v.dem*365;
+  const Dviv=Math.max(dens/v.pph,0.01);
+  const Lret=v.kd*v.hh/Math.sqrt(Dviv);
+  // --- RED ---
+  const aomLine=v.amt*1e6*dg;
+  const aomRet=v.abt*1e6*Lret;
+  const pMT=(v.pmt*dg)/100;
+  const pFix=(v.ptr+v.pbt)/100;
+  const pTot=Math.min(pMT+pFix,0.6);
+  const Einj=E/(1-pTot);
+  const Eloss=Einj-E;
+  const cLoss=Eloss*v.ce;
+  const gridTot=aomLine+aomRet+cLoss;
+  // --- SOLAR ---
+  const P=E/(8760*v.cfac/100);
+  const Cbat=v.hh*v.dem*v.au;
+  const capexBat=Cbat*v.cb*1e6;
+  const iR=v.i/100;
+  const repBat=v.au>0 ? capexBat*sff(iR,v.bl) : 0;
+  const capexInv=P*v.ci*1e6;
+  const repInv=capexInv*sff(iR,v.il);
+  const aomFV=v.afv*1000*P;
+  const solTot=aomFV+repBat+repInv;
+  // --- CAPEX (excluded, informational) ---
+  const capexGrid=(v.ckx*1e6)*(dg+Lret);
+  const capexSolar=v.cwx*1e6*P+capexBat;
+  return {hab,E,Dviv,Lret,aomLine,aomRet,pMT,pFix,pTot,Einj,Eloss,cLoss,gridTot,
+          P,Cbat,capexBat,repBat,capexInv,repInv,aomFV,solTot,capexGrid,capexSolar};
+}
+
+function distThreshold(v,dens){
+  const s=calc(v,0,dens).solTot;
+  let prev=calc(v,0,dens).gridTot;
+  if(prev>=s) return 0;
+  for(let d=0.1;d<=200;d+=0.1){
+    const g=calc(v,d,dens).gridTot;
+    if(g>=s) return d;
+  }
+  return null;
+}
+function densThreshold(v,dg){
+  const s=calc(v,dg,50).solTot;
+  for(let D=200;D>=0.2;D-=0.1){
+    const g=calc(v,dg,D).gridTot;
+    if(g>=s) return D;
+  }
+  return null;
+}
+
+const W=560,H=340,mL=64,mR=18,mT=16,mB=42;
+function draw(v){
+  const r=calc(v,v.dg,v.dens);
+  const Dmax=40;
+  const s=r.solTot/r.hab;
+  const pts=[]; let ymax=s;
+  for(let d=0;d<=Dmax;d+=0.5){
+    const g=calc(v,d,v.dens).gridTot/r.hab;
+    pts.push([d,g]); if(g>ymax)ymax=g;
+  }
+  ymax=Math.min(ymax,s*3.2); ymax*=1.08;
+  const x=d=>mL+(d/Dmax)*(W-mL-mR);
+  const y=val=>mT+(1-Math.min(val,ymax)/ymax)*(H-mT-mB);
+  let g=''; pts.forEach((p,k)=>{g+=(k?'L':'M')+x(p[0]).toFixed(1)+' '+y(p[1]).toFixed(1)+' ';});
+  const sY=y(s);
+  const dstar=distThreshold(v,v.dens);
+
+  let ax='';
+  for(let t=0;t<=4;t++){const val=ymax*t/4;const yy=y(val);
+    ax+='<line class="axis" x1="'+mL+'" y1="'+yy+'" x2="'+(W-mR)+'" y2="'+yy+'" opacity="'+(t===0?1:.22)+'"/>';
+    ax+='<text class="tick" x="'+(mL-8)+'" y="'+(yy+3)+'" text-anchor="end">'+fmt(val/1000)+'</text>';}
+  [0,10,20,30,40].forEach(d=>{ax+='<text class="tick" x="'+x(d)+'" y="'+(H-mB+16)+'" text-anchor="middle">'+d+'</text>';});
+  ax+='<line class="axis" x1="'+mL+'" y1="'+mT+'" x2="'+mL+'" y2="'+(H-mB)+'"/>';
+  ax+='<text class="albl" x="'+mL+'" y="'+(H-6)+'" text-anchor="start">distancia a la red (km)  →</text>';
+  ax+='<text class="albl" transform="translate(14,'+(mT+8)+') rotate(-90)" text-anchor="end">mil COP / hab · año</text>';
+
+  let cm='';
+  if(dstar!==null && dstar<=Dmax){
+    cm='<line class="xline" x1="'+x(dstar)+'" y1="'+mT+'" x2="'+x(dstar)+'" y2="'+(H-mB)+'"/>'+
+       '<circle class="xdot" cx="'+x(dstar)+'" cy="'+sY+'" r="4.5"/>'+
+       '<text class="tick" x="'+(x(dstar)+7)+'" y="'+(sY-7)+'" fill="var(--cross)">'+dstar.toFixed(1)+' km</text>';
+  }
+  // current position marker
+  const gNow=r.gridTot/r.hab;
+  cm+='<circle cx="'+x(v.dg)+'" cy="'+y(gNow)+'" r="3.5" fill="var(--grid)" stroke="var(--ink)" stroke-width="1.5"/>';
+
+  $('chart').innerHTML=ax+
+    '<line class="curveS" x1="'+mL+'" y1="'+sY+'" x2="'+(W-mR)+'" y2="'+sY+'"/>'+
+    '<path class="curveG" d="'+g+'"/>'+cm;
+
+  // verdict
+  if(dstar!==null && dstar<=200){
+    $('thrDist').innerHTML=dstar.toFixed(1)+' <small>km</small>';
+    $('verdictText').innerHTML='Hasta '+dstar.toFixed(1)+' km la <span class="chip g">red</span> es más barata de sostener. Más allá, gana la <span class="chip s">solar</span>. Estás a '+v.dg.toFixed(1)+' km: gana la '+(v.dg<dstar?'<span class="chip g">red</span>':'<span class="chip s">solar</span>')+'.';
+  }else{
+    $('thrDist').innerHTML='> 200 <small>km</small>';
+    $('verdictText').innerHTML='La <span class="chip g">red</span> es más barata de mantener a cualquier distancia realista. La reposición de baterías domina todo.';
+  }
+  const Dstar=densThreshold(v,v.dg);
+  if(Dstar!==null && Dstar>=0.3){
+    $('thrDens').innerHTML=Dstar.toFixed(1)+' <small style="font-size:12px;color:var(--dim)">hab/km²</small>';
+    $('densText').innerHTML='Por debajo de '+Dstar.toFixed(1)+' hab/km² ganaría la solar. Landázuri está en <b>15-17 hab/km²</b> (DANE 2018/2024) y Puerto Parra entre <b>6 y 12 hab/km²</b> según el área de referencia — ambos, casi siempre, <b>por encima</b> del umbral: a esta distancia, la red gana incluso en tus municipios focales.';
+  }else{
+    $('thrDens').innerHTML='no existe';
+    $('densText').innerHTML='A esta distancia <b>ninguna densidad</b> —por baja que sea— hace que la solar gane. El umbral de densidad no existe en el marco de mantenimiento.';
+  }
+
+  // data panel
+  const gr=[
+    ['Habitantes servidos',fmt(r.hab)+' hab'],
+    ['Viviendas (puntos de conexión)',fmt(v.hh)+' viv'],
+    ['Densidad de viviendas',fmt(r.Dviv,2)+' viv/km²'],
+    ['Longitud troncal MT',fmt(v.dg,1)+' km'],
+    ['Longitud reticulación BT',fmt(r.Lret,2)+' km'],
+    ['Longitud total de red',fmt(v.dg+r.Lret,2)+' km'],
+    ['— AOM línea MT',M(r.aomLine)+' COP/año'],
+    ['— AOM reticulación BT',M(r.aomRet)+' COP/año'],
+    ['Energía entregada',fmt(r.E)+' kWh/año'],
+    ['Energía inyectada',fmt(r.Einj)+' kWh/año'],
+    ['Pérdidas por distancia (MT)',fmt(r.pMT*100,3)+' %'],
+    ['Pérdidas fijas (trafo + BT)',fmt(r.pFix*100,2)+' %'],
+    ['Pérdidas totales',fmt(r.pTot*100,2)+' %'],
+    ['— Energía perdida',fmt(r.Eloss)+' kWh/año'],
+    ['— Costo de las pérdidas',M(r.cLoss)+' COP/año']
+  ];
+  let gh=''; gr.forEach(row=>{gh+='<div class="dprow'+(row[0].startsWith('—')?' sub':'')+'"><span>'+row[0]+'</span><b>'+row[1]+'</b></div>';});
+  gh+='<div class="dprow tot"><span>Costo recurrente total</span><b>'+M(r.gridTot)+' COP/año</b></div>';
+  gh+='<div class="dprow tot" style="border-top:none;margin-top:0;padding-top:2px"><span>Por habitante</span><b>'+fmt(r.gridTot/r.hab)+' COP/hab·año</b></div>';
+  gh+='<div class="dprow tot" style="border-top:none;margin-top:0;padding-top:2px"><span>Por vivienda</span><b>'+fmt(r.gridTot/v.hh)+' COP/viv·año</b></div>';
+  $('gridRows').innerHTML=gh;
+
+  const sr=[
+    ['Potencia FV requerida',fmt(r.P,1)+' kWp'],
+    ['Capacidad de batería',fmt(r.Cbat,1)+' kWh'],
+    ['CAPEX de un banco de baterías',M(r.capexBat)+' COP'],
+    ['Factor de fondo SFF (batería)',fmt(sff(v.i/100,v.bl),4)],
+    ['— Reposición batería',M(r.repBat)+' COP/año'],
+    ['CAPEX de un inversor',M(r.capexInv)+' COP'],
+    ['Factor de fondo SFF (inversor)',fmt(sff(v.i/100,v.il),4)],
+    ['— Reposición inversor',M(r.repInv)+' COP/año'],
+    ['— AOM fotovoltaico',M(r.aomFV)+' COP/año'],
+    ['Pérdidas de transmisión','0 kWh/año'],
+    ['Dependencia de la distancia','ninguna']
+  ];
+  let sh=''; sr.forEach(row=>{sh+='<div class="dprow'+(row[0].startsWith('—')?' sub':'')+'"><span>'+row[0]+'</span><b>'+row[1]+'</b></div>';});
+  sh+='<div class="dprow tot"><span>Costo recurrente total</span><b>'+M(r.solTot)+' COP/año</b></div>';
+  sh+='<div class="dprow tot" style="border-top:none;margin-top:0;padding-top:2px"><span>Por habitante</span><b>'+fmt(r.solTot/r.hab)+' COP/hab·año</b></div>';
+  sh+='<div class="dprow tot" style="border-top:none;margin-top:0;padding-top:2px"><span>Por vivienda</span><b>'+fmt(r.solTot/v.hh)+' COP/viv·año</b></div>';
+  $('solRows').innerHTML=sh;
+
+  let ch='';
+  ch+='<div class="dprow"><span>CAPEX red (línea + reticulación)</span><b>'+M(r.capexGrid)+' COP</b></div>';
+  ch+='<div class="dprow"><span>CAPEX solar (paneles + primera batería)</span><b>'+M(r.capexSolar)+' COP</b></div>';
+  ch+='<div class="dprow"><span>Donación por habitante — red</span><b>'+fmt(r.capexGrid/r.hab)+' COP/hab</b></div>';
+  ch+='<div class="dprow"><span>Donación por habitante — solar</span><b>'+fmt(r.capexSolar/r.hab)+' COP/hab</b></div>';
+  $('capexRows').innerHTML=ch;
+
+  $('capexNote').innerHTML='CAPEX excluido: la Gobernación y el FAZNI donan '+M(r.capexGrid)+' COP (red) o '+M(r.capexSolar)+' COP (solar). El modelo pregunta qué pasa <b>después</b> de la inauguración.';
+
+  // note
+  const ratio=r.solTot/r.gridTot;
+  let note;
+  if(ratio>1.15){
+    note='<b>El resultado se invierte.</b> Cuando el CAPEX era el criterio, la solar ganaba a distancia. Sin CAPEX, la solar cuesta <b>'+fmt(ratio,1)+'×</b> más de sostener que la red, porque la batería es una recompra forzosa cada '+fmt(v.bl)+' años mientras que la línea, ya construida, solo pide cuadrilla y poda. La donación de capital es un regalo que a la red le dura 40 años y a la solar '+fmt(v.bl)+'. <b>Esa asimetría —no la densidad— es tu hallazgo.</b>';
+  }else if(ratio<0.85){
+    note='<b>Aquí la solar sí es sostenible:</b> a '+v.dg.toFixed(1)+' km, mantener la línea cuesta más que reponer baterías. Pero fíjate cuánta distancia hizo falta para llegar aquí, y compárala con la distancia real de tus municipios al SIN.';
+  }else{
+    note='<b>Estás en el punto de indiferencia.</b> Los dos cuestan casi lo mismo de mantener. Aquí la decisión ya no la toma la economía sino la institución: la red tiene un operador de red obligado a mantenerla y un mecanismo tarifario nacional detrás; la batería no tiene ninguno de los dos.';
+  }
+  $('dominanceNote').innerHTML=note;
+}
+
+function update(){draw(readVals());}
+ids.forEach(k=>$(k).addEventListener('input',update));
+update();
+</script>
+</body>
+</html>
